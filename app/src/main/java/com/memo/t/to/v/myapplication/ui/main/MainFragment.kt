@@ -1,50 +1,70 @@
-package com.memo.t.to.v.myapplication
+package com.memo.t.to.v.myapplication.ui.main
 
-import android.Manifest.permission.RECORD_AUDIO
+import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.widget.Button
-import android.widget.TextView
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.databinding.DataBindingUtil
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import com.memo.t.to.v.myapplication.R
+import com.memo.t.to.v.myapplication.databinding.MainFragmentBinding
 import timber.log.Timber
 
-class MainActivity : AppCompatActivity() {
+class MainFragment : Fragment() {
+
+    companion object {
+        private const val PERMISSIONS_RECORD_AUDIO = 1000
+        fun newInstance() = MainFragment()
+    }
+
+    private lateinit var binding: MainFragmentBinding
+    private val viewModel: MainViewModel by viewModels()
     private var speechRecognizer: SpeechRecognizer? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        Timber.plant(Timber.DebugTree())
-        setContentView(R.layout.activity_main)
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        binding = DataBindingUtil.inflate(inflater, R.layout.main_fragment, container, false)
+        return binding.root
+    }
 
-        val granted = ContextCompat.checkSelfPermission(this, RECORD_AUDIO)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        Timber.plant(Timber.DebugTree())
+        val granted = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO)
         if (granted != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(RECORD_AUDIO), PERMISSIONS_RECORD_AUDIO)
+            ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.RECORD_AUDIO),
+                PERMISSIONS_RECORD_AUDIO
+            )
         } else {
-            val textView = findViewById<TextView>(R.id.recognize_text_view)
-            val startButton = findViewById<Button>(R.id.recognize_start_button)
-            val stopButton = findViewById<Button>(R.id.recognize_stop_button)
             // Activity での生成になるので、ApplicationContextを渡してやる
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
-            speechRecognizer?.setRecognitionListener(createRecognitionListenerStringStream { textView.text = it })
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+            speechRecognizer?.setRecognitionListener(createRecognitionListenerStringStream {
+                binding.recognizeTextView.text = it
+            })
 
             // setOnClickListener でクリック動作を登録し、クリックで音声入力が開始するようにする
-            startButton.setOnClickListener {
+            binding.recognizeStartButton.setOnClickListener {
                 speechRecognizer?.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH))
             }
 
             // setOnclickListner でクリック動作を登録し、クリックで音声入力が停止するようにする
-            stopButton.setOnClickListener { speechRecognizer?.stopListening() }
+            binding.recognizeStopButton.setOnClickListener { speechRecognizer?.stopListening() }
 
         }
     }
 
-    // Activity のライフサイクルにあわせて SpeechRecognizer を破棄する
+    // ライフサイクルにあわせて SpeechRecognizer を破棄する
     override fun onDestroy() {
         super.onDestroy()
         speechRecognizer?.destroy()
@@ -66,9 +86,5 @@ class MainActivity : AppCompatActivity() {
                 onResult("onResults " + stringArray.toString())
             }
         }
-    }
-
-    companion object {
-        private const val PERMISSIONS_RECORD_AUDIO = 1000
     }
 }
