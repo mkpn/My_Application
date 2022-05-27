@@ -41,27 +41,63 @@ class MainFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         Timber.plant(Timber.DebugTree())
-        val granted = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO)
+        val granted =
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO)
         if (granted != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.RECORD_AUDIO),
+            ActivityCompat.requestPermissions(
+                requireActivity(), arrayOf(Manifest.permission.RECORD_AUDIO),
                 PERMISSIONS_RECORD_AUDIO
             )
         } else {
-            // Activity での生成になるので、ApplicationContextを渡してやる
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
-            speechRecognizer?.setRecognitionListener(createRecognitionListenerStringStream {
-                binding.recognizeTextView.text = it
-            })
+            initRecognizer()
 
             // setOnClickListener でクリック動作を登録し、クリックで音声入力が開始するようにする
             binding.recognizeStartButton.setOnClickListener {
-                speechRecognizer?.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH))
+                startListening()
             }
 
             // setOnclickListner でクリック動作を登録し、クリックで音声入力が停止するようにする
             binding.recognizeStopButton.setOnClickListener { speechRecognizer?.stopListening() }
 
         }
+    }
+
+    private fun startListening() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).also {
+            it.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        }
+        speechRecognizer?.startListening(intent)
+        println("デバッグ startListening!")
+    }
+
+    private fun initRecognizer() {
+        speechRecognizer?.let {
+            it.stopListening()
+            it.cancel()
+            it.destroy()
+        }
+        speechRecognizer = null
+
+        // Activity での生成になるので、ApplicationContextを渡してやる
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+        speechRecognizer?.setRecognitionListener(createRecognitionListenerStringStream(
+            {
+                println("デバッグ onResults $it")
+                restartListening()
+            },
+            {
+                println("デバッグ $it")
+                val currentText = binding.recognizeTextView.text.toString()
+                println("デバッグ 次のテキスト　${currentText + it}")
+                binding.recognizeTextView.text = currentText + it
+                restartListening()
+            }
+        ))
+    }
+
+    private fun restartListening() {
+        initRecognizer()
+        startListening()
     }
 
     // ライフサイクルにあわせて SpeechRecognizer を破棄する
@@ -71,19 +107,48 @@ class MainFragment : Fragment() {
     }
 
     /** 公開関数で受け取った TextView の更新処理を各関数で呼び出す*/
-    private fun createRecognitionListenerStringStream(onResult : (String)-> Unit) : RecognitionListener {
+    private fun createRecognitionListenerStringStream(
+        onResult: (String) -> Unit,
+        onPartialResult: (String) -> Unit
+    ): RecognitionListener {
         return object : RecognitionListener {
-            override fun onRmsChanged(rmsdB: Float) { /** 今回は特に利用しない */ }
-            override fun onReadyForSpeech(params: Bundle) { onResult("onReadyForSpeech") }
-            override fun onBufferReceived(buffer: ByteArray) { onResult("onBufferReceived") }
-            override fun onPartialResults(partialResults: Bundle) { onResult("onPartialResults") }
-            override fun onEvent(eventType: Int, params: Bundle) { onResult("onEvent") }
-            override fun onBeginningOfSpeech() { onResult("onBeginningOfSpeech") }
-            override fun onEndOfSpeech() { onResult("onEndOfSpeech") }
-            override fun onError(error: Int) { onResult("onError") }
+            override fun onRmsChanged(rmsdB: Float) {
+                /** 今回は特に利用しない */
+            }
+
+            override fun onReadyForSpeech(params: Bundle) {
+            }
+
+            override fun onBufferReceived(buffer: ByteArray) {
+            }
+
+            override fun onPartialResults(partialResults: Bundle) {
+                val recData =
+                    partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                if (recData != null && recData.isNotEmpty()) {
+                    val text = recData.joinToString("")
+                    if (text.isNotBlank()) {
+                        onPartialResult(text)
+                    }
+                }
+            }
+
+            override fun onEvent(eventType: Int, params: Bundle) {
+            }
+
+            override fun onBeginningOfSpeech() {
+            }
+
+            override fun onEndOfSpeech() {
+                println("デバッグ end of speech")
+            }
+
+            override fun onError(error: Int) {
+            }
+
             override fun onResults(results: Bundle) {
                 val stringArray = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                onResult("onResults " + stringArray.toString())
+                onResult(stringArray.toString())
             }
         }
     }
